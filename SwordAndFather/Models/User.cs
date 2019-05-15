@@ -21,6 +21,8 @@ namespace SwordAndFather.Models
 
         // POCO - Plain Old CLR Objects - is what is above
 
+        public List<Target> Targets { get; set; }
+
 
 
     }

@@ -1,23 +1,27 @@
-﻿using System;
+﻿using Dapper;
+using SwordAndFather.Models;
+using System;
 using System.Collections.Generic;
 using System.Data.SqlClient;
-using SwordAndFather.Models;
-using Dapper;
 using System.Linq;
 
 namespace SwordAndFather.Data
 {
     public class UserRepository
     {
+        readonly TargetRepository _targetRepository;
         const string ConnectionString = "Server=localhost;Database=SwordAndFather;Trusted_Connection=True;";
 
-        // Inserting 
+        public UserRepository(TargetRepository targetRepository)
+        {
+            _targetRepository = targetRepository;
+        }
 
         public User AddUser(string username, string password)
         {
             using (var db = new SqlConnection(ConnectionString))
             {
-                var newUser = db.QueryFirstOrDefault<User>($@"
+                var newUser = db.QueryFirstOrDefault<User>(@"
                     Insert into users (username,password)
                     Output inserted.*
                     Values(@username,@password)",
@@ -27,87 +31,24 @@ namespace SwordAndFather.Data
                 {
                     return newUser;
                 }
-                //connection.Open();
-                //var insertUserCommand = connection.CreateCommand();
-                //insertUserCommand.CommandText = $@"Insert into users (username,password)
-                //Output inserted.*
-                //Values(@username,@password)";
-
-                //insertUserCommand.Parameters.AddWithValue("username", username);
-                //insertUserCommand.Parameters.AddWithValue("password", password);
-
-                //var reader = insertUserCommand.ExecuteReader();
-
-                //if (reader.Read())
-                //{
-                // //var insertedPassword = reader["password"].ToString();
-                // var insertedUsername = reader["username"].ToString();
-                // var insertedId = (int)reader["Id"];
-
-                // var newUser = new User(insertedUsername, insertedPassword) { Id = insertedId };
             }
 
-            throw new Exception("No user found");
+            throw new Exception("No user created");
         }
 
-
-        //public List<User> GetAll()
-        //{
-        //var users = new List<User>();
-
-        //var connection = new SqlConnection("Server=localhost;Database=SwordAndFather;Trusted_Connection=True;");
-        //connection.Open();
-
-        //var getAllUsersCommand = connection.CreateCommand();
-        //getAllUsersCommand.CommandText = @"select username,password,id  
-        //from users";
-
-        //var reader = getAllUsersCommand.ExecuteReader();
-
-        //while (reader.Read())
-        //{
-        //var id = (int)reader["Id"];
-        //var username = reader["username"].ToString();
-        //var password = reader["password"].ToString();
-        //var user = new User(username, password) { Id = id };
-
-        //users.Add(user);
-        // }
-
-        //connection.Close();
-
-        // return users;
-        //}
-
-        // Getting Users
-
-        public IEnumerable<User> GetAll()
+        public void DeleteUser(int userId)
         {
             using (var db = new SqlConnection(ConnectionString))
             {
-                var users = db.Query<User>("select username, password, id from users").ToList();
-                var targets = db.Query<Target>("Select * from Targets").ToList();
+                var parameter = new { Id = userId };
 
-                foreach (var user in users)
-                {
-                    user.Targets = targets.Where(x => x.UserId == user.Id).ToList();
-                }
+                var deleteQuery = "Delete From Users where Id = @id";
 
-                return users;
-            }
-        }
-
-        public void DeleteUser(int id)
-        {
-            using (var db = new SqlConnection(ConnectionString))
-            {
-                // Executes don't return anything 
-                // The second parameter is an anonymus type
-                var rowsAffected = db.Execute("delete from Users where Id = @id", new { id });
+                var rowsAffected = db.Execute(deleteQuery, parameter);
 
                 if (rowsAffected != 1)
                 {
-                    throw new Exception("It didn't work");
+                    throw new Exception("Didn't do right");
                 }
             }
         }
@@ -116,19 +57,45 @@ namespace SwordAndFather.Data
         {
             using (var db = new SqlConnection(ConnectionString))
             {
-                var rowsAffected = db.Execute(@"update Users 
-                                                Set username = @username, 
-                                                password = @password 
-                                                Where id = @id", userToUpdate);
+                var sql = @"Update Users
+                            Set username = @username,
+                                password = @password
+                            Where id = @id";
+
+                var rowsAffected = db.Execute(sql, userToUpdate);
 
                 if (rowsAffected == 1)
-                {
                     return userToUpdate;
+            }
+
+            throw new Exception("Could not update user");
+        }
+
+        public IEnumerable<User> GetAll()
+        {
+            using (var db = new SqlConnection(ConnectionString))
+            {
+                var users = db.Query<User>("select username, password, id from users").ToList();
+
+                var targets = _targetRepository.GetAll();
+
+                foreach (var user in users)
+                {
+                    var matchingTargets = targets.Where(target => target.UserId == user.Id).ToList();
+                    user.Targets = matchingTargets;
                 }
 
-                throw new Exception("Could not return a user");
+                //var targets = new TargetRepository().GetAll().GroupBy(target => target.UserId);
+
+                //foreach (var user in users)
+                //{
+                //    var matchingTargets = targets.FirstOrDefault(grouping => grouping.Key == user.Id);
+
+                //    user.Targets = matchingTargets?.ToList();
+                //}
+
+                return users;
             }
         }
     }
-
 }
